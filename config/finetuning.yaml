@@ -8,7 +8,7 @@ common:
   fp16_no_flatten_grads: true
 
 checkpoint:
-  save_interval: 1
+  save_interval: 5
   save_interval_updates: 10000
   keep_interval_updates: 1
   no_epoch_checkpoints: true
@@ -17,14 +17,14 @@ checkpoint:
 
 task:
   _name: mae_image_classification
-  data: /hpc_stor03/sjtu_home/wenxi.chen/mydata/audio/unbalanced_finetune
+  data: /home/adminster/DYH/EAT_manifest/AS20K_local
   downsr_16hz: true
   audio_mae: true
   target_length: 1024
   roll_aug: false
   noise: false
   h5_format: false
-  weights_file: /hpc_stor03/sjtu_home/wenxi.chen/mydata/audio/unbalanced_finetune/weight_train_all.csv
+  weights_file: ""
   num_samples: 200000
   
   AS2M_finetune: false
@@ -34,7 +34,7 @@ task:
 
 
 dataset:
-  num_workers: 6
+  num_workers: 20
   batch_size: 96
   skip_invalid_size_inputs_valid_test: true
   required_batch_size_multiple: 2
@@ -77,7 +77,7 @@ model:
   _name: mae_image_classification
   mixup: 0.7
   mixup_prob: 0.9
-  model_path: /hpc_stor03/sjtu_home/wenxi.chen/model_ckpt/EAT/checkpoint10.pt
+  model_path: /home/adminster/DYH/eatdata/EAT-base_epoch10_pt.pt
   audio_mae: true
   num_classes: 527
   specaug: true
