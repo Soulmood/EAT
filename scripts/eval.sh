@@ -2,14 +2,15 @@
 
 export CUDA_VISIBLE_DEVICES=0
 
-python EAT/evaluation/eval.py  \
-    --label_file='EAT/inference/labels.csv' \
-    --eval_dir='/hpc_stor03/sjtu_home/wenxi.chen/mydata/audio/AS20K' \
-    --model_dir='EAT' \
-    --checkpoint_dir='/hpc_stor03/sjtu_home/wenxi.chen/model_ckpt/EATs/finetuning/as20k_epoch30/checkpoint_last.pt' \
+python /home/adminster/DYH/EAT/evaluation/eval.py  \
+    --label_file='/home/adminster/DYH/EAT/inference/labels.csv' \
+    --eval_dir='/home/adminster/DYH/EAT_manifest/AS20K_local' \
+    --model_dir='/home/adminster/DYH/EAT' \
+    --checkpoint_dir='/home/adminster/DYH/eatdata/EAT-base_epoch10_ft_AS20K.pt' \
     --target_length=1024 \
     --device='cuda' \
-    --batch_size=32
+    --batch_size=32 \
+    --ap_log_path='/home/adminster/DYH/eatdata/results_20percent/baseline_20percent.txt'
 
 # For optimal performance, 1024 is recommended for 10-second audio clips. (128 for 1-second)
 # However, you should adjust the target_length parameter based on the duration and characteristics of your specific audio inputs.

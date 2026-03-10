@@ -17,7 +17,7 @@ checkpoint:
 
 task:
   _name: mae_image_classification
-  data: /home/adminster/DYH/EAT_manifest/AS20K_local
+  data: /home/adminster/DYH/EAT_manifest/AS20K_20percent
   downsr_16hz: true
   audio_mae: true
   target_length: 1024
@@ -53,7 +53,7 @@ criterion:
 
 optimization:
   max_update: 300000
-  lr: [0.00005]
+  lr: [0.0002]
 
 optimizer:
   _name: composite
@@ -77,7 +77,7 @@ model:
   _name: mae_image_classification
   mixup: 0.7
   mixup_prob: 0.9
-  model_path: /home/adminster/DYH/eatdata/EAT-base_epoch10_pt.pt
+  model_path: /home/adminster/DYH/eatdata/EAT-base_epoch10_ft_AS20K.pt
   audio_mae: true
   num_classes: 527
   specaug: true

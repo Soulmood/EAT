@@ -106,12 +106,19 @@ class AudioDataset(Dataset):
         label = self.labels[audio_path.name]
         wav, sr = sf.read(audio_path)
         source = torch.from_numpy(wav).float().to(self.device)
+        if source.dim() > 1:
+            source = source.mean(-1)
         if sr != 16e3:
             source = torchaudio.functional.resample(source, orig_freq=sr, new_freq=16000).float()
         source = source - source.mean()
+        # Ensure source is 1D for kaldi.fbank
+        if source.dim() > 1:
+            source = source.squeeze()
         source = source.unsqueeze(dim=0)
         source = torchaudio.compliance.kaldi.fbank(source, htk_compat=True, sample_frequency=16000, use_energy=False,
-                                                    window_type='hanning', num_mel_bins=128, dither=0.0, frame_shift=10).unsqueeze(dim=0)
+                                                    window_type='hanning', num_mel_bins=128, dither=0.0, frame_shift=10)
+        # source after fbank is [frames, bins], need to be [1, frames, bins] for later padding and model
+        source = source.unsqueeze(dim=0)
         n_frames = source.shape[1]
         diff = self.target_length - n_frames
         if diff > 0:
@@ -162,7 +169,11 @@ def main():
     mAP, ap_values  = calculate_map(outputs_tensor.cpu().numpy(), targets_tensor.cpu().numpy(),inx_lbl)
     print(f"The fine-tuned model's performance on Audioset-eval with {len(dataset)} audio clips is: {mAP:.4f}")
 
-    with open(args.ap_log_path, 'w') as log_file:
+    # Ensure the directory for the log file exists
+    log_path = Path(args.ap_log_path)
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+
+    with open(log_path, 'w') as log_file:
         log_file.write(f"{'Class':<50s} AP\n")
         for k, ap in ap_values.items():
             log_file.write(f"{k:<50s} {ap:.4f}\n")

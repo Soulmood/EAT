@@ -5,3 +5,4 @@ easy_loader/
 multirun/
 clean_as20k_manifests_deep.py
 clean_as20k_manifests.py
+prepare_as20k.py
