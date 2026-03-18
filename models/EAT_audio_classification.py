@@ -41,6 +41,7 @@ class MaeImageClassificationConfig(FairseqDataclass):
     model_path: str = MISSING
     no_pretrained_weights: bool = False
     linear_classifier: bool = False
+    reset_classifier: bool = True
     num_classes: int = 1000
     mixup: float = 0.0
     cutmix: float = 0.0
@@ -117,10 +118,27 @@ class MaeImageClassificationModel(BaseFairseqModel):
         self.target_length = self.cfg.target_length
 
         # adjust pre-training config into fine-tuning 
+        head_state = None
         if cfg.pretrained_model_args is None:
             state = checkpoint_utils.load_checkpoint_to_cpu(cfg.model_path, {})
             pretrained_args = state.get("cfg", None)
 
+            # Added logic to handle loading from a fine-tuned checkpoint (MAE classification model)
+            if pretrained_args.model._name == "mae_image_classification":
+                logger.info("Loading from a fine-tuned checkpoint, extracting backbone...")
+                head_state = {
+                    k: v
+                    for k, v in state["model"].items()
+                    if k.startswith("head.") or k.startswith("fc_norm.")
+                }
+                pretrained_args = pretrained_args.model.pretrained_model_args
+                
+                new_state_model = {}
+                for k, v in state["model"].items():
+                    if k.startswith("model."):
+                        new_state_model[k[6:]] = v
+                state["model"] = new_state_model
+            
             pretrained_args.criterion = None
             pretrained_args.lr_scheduler = None
 
@@ -212,33 +230,13 @@ class MaeImageClassificationModel(BaseFairseqModel):
                     "modality_encoders.IMAGE.positional_encoder.pos_embed"
                 ]
                 
-                
                 del state["model"][
                     "modality_encoders.IMAGE.positional_encoder.pos_embed"
                 ]
             if "modality_encoders.IMAGE.encoder_mask" in state["model"]:
                 del state["model"]["modality_encoders.IMAGE.encoder_mask"]
-                
-            # if cfg.esc50_eval:
-            #     num_patches = 256
-            #     embed_dim = 768
-            #     pos_embed = nn.Parameter(torch.zeros(1, num_patches, embed_dim), requires_grad=False)
-            #     emb = get_2d_sincos_pos_embed_flexible(pos_embed.shape[-1],(32,8),cls_token=False)
-            #     pos_embed.data.copy_(torch.from_numpy(emb[:num_patches,:]).float().unsqueeze(0))
-            #     state['model']["modality_encoders.IMAGE.fixed_positional_encoder.positions"] = pos_embed
-            #     state['model']['_ema']["modality_encoders.IMAGE.fixed_positional_encoder.positions"] = pos_embed
-                
-            # if cfg.spcv2_eval:
-            #     num_patches = 64
-            #     embed_dim = 768
-            #     pos_embed = nn.Parameter(torch.zeros(1, num_patches, embed_dim), requires_grad=False)
-            #     emb = get_2d_sincos_pos_embed_flexible(pos_embed.shape[-1],(8,8),cls_token=False)
-            #     pos_embed.data.copy_(torch.from_numpy(emb[:num_patches,:]).float().unsqueeze(0))
-            #     state['model']["modality_encoders.IMAGE.fixed_positional_encoder.positions"] = pos_embed
-            #     state['model']['_ema']["modality_encoders.IMAGE.fixed_positional_encoder.positions"] = pos_embed
-                
 
-            model.load_state_dict(state["model"], strict=True) 
+            model.load_state_dict(state["model"], strict=False) 
 
         if self.d2v_multi:
             model.remove_pretraining_modules(modality="image")
@@ -246,6 +244,7 @@ class MaeImageClassificationModel(BaseFairseqModel):
             model.remove_pretraining_modules()
 
         if self.linear_classifier:
+            logger.info("Freezing encoder for linear probing...")
             model.requires_grad_(False)
 
         self.fc_norm = None
@@ -258,6 +257,12 @@ class MaeImageClassificationModel(BaseFairseqModel):
 
         nn.init.trunc_normal_(self.head.weight, std=0.02)
         nn.init.constant_(self.head.bias, 0)
+        
+        if head_state is not None:
+            if self.linear_classifier and cfg.reset_classifier:
+                logger.info("Resetting classifier head for linear probing...")
+            else:
+                self.load_state_dict(head_state, strict=False)
 
         self.mixup_fn = None
         self.specaug = cfg.specaug

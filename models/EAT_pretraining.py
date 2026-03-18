@@ -390,9 +390,11 @@ class Data2VecMultiModel(BaseFairseqModel):
     def _load_from_state_dict(self, state_dict, prefix, *args, **kwargs):
         k = prefix + "_ema"
         if self.ema is not None:
-            assert k in state_dict
-            self.ema.restore(state_dict[k], True)
-            del state_dict[k]
+            if k in state_dict:
+                self.ema.restore(state_dict[k], True)
+                del state_dict[k]
+            else:
+                logger.info(f"Skipping EMA loading as key {k} is missing")
         elif k in state_dict:
             del state_dict[k]
 
