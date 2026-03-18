@@ -38,6 +38,8 @@ from .images import (
     ImageEncoder,
 )
 
+from .my_module import PGEnergyModule
+
 logger = logging.getLogger(__name__)
 
 # we follow the work of data2vec 2.0 on image modality and Audio-MAE in EAT 
@@ -142,6 +144,7 @@ class Data2VecMultiConfig(FairseqDataclass):
     cls_loss: float = 0
     recon_loss: float = 0
     d2v_loss: float = 1
+    physics_loss_weight: float = 0
 
     decoder_group: bool = False
 
@@ -229,6 +232,7 @@ class Data2VecMultiModel(BaseFairseqModel):
         self.loss_beta = cfg.loss_beta
         self.loss_scale = cfg.loss_scale
         self.utterance_level = cfg.utterance_level
+        self.physics_module = PGEnergyModule() if cfg.physics_loss_weight > 0 else None
 
         self.dropout_input = nn.Dropout(cfg.dropout_input)
 
@@ -701,6 +705,10 @@ class Data2VecMultiModel(BaseFairseqModel):
             result["losses"]["recon"] = (
                 self.d2v_loss(recon, target.float()) * self.cfg.recon_loss
             )
+            if self.physics_module is not None:
+                result["losses"]["physics"] = (
+                    self.physics_module(recon, target) * self.cfg.physics_loss_weight
+                )
 
         if self.cfg.d2v_loss > 0:
             for i, x in enumerate(xs):

@@ -57,6 +57,8 @@ class D2vImageConfig(D2vModalityConfig):
     enc_dec_transformer: bool = False
     target_length: int = 1024
     max_length: int = 768
+    use_tfddc: bool = False
+    tfddc_num_layers: int = 2
 
 class ImageEncoder(ModalitySpecificEncoder):
 
@@ -86,16 +88,26 @@ class ImageEncoder(ModalitySpecificEncoder):
 
         # (B,512,768)
         # note: we fix the variable length sequence problem here -> not limited to fixed length data
-        local_encoder = PatchEmbed_new(
-            img_size,
-            modality_cfg.patch_size,
-            modality_cfg.in_chans,
-            modality_cfg.embed_dim,
-        )
+        if modality_cfg.use_tfddc and modality_cfg.in_chans == 1:
+            from .my_module import TFDDCModule
 
-        # CNN initialize
-        w = local_encoder.proj.weight.data
-        torch.nn.init.xavier_uniform_(w.view([w.shape[0], -1]))
+            local_encoder = TFDDCModule(
+                img_size=img_size,
+                patch_size=modality_cfg.patch_size,
+                in_chans=modality_cfg.in_chans,
+                embed_dim=modality_cfg.embed_dim,
+                num_tfddc=modality_cfg.tfddc_num_layers,
+            )
+        else:
+            local_encoder = PatchEmbed_new(
+                img_size,
+                modality_cfg.patch_size,
+                modality_cfg.in_chans,
+                modality_cfg.embed_dim,
+            )
+
+            w = local_encoder.proj.weight.data
+            torch.nn.init.xavier_uniform_(w.view([w.shape[0], -1]))
 
         if modality_cfg.embed_dim != embed_dim:
             local_encoder = nn.Sequential(
