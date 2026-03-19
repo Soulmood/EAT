@@ -42,6 +42,9 @@ class MaeImageClassificationConfig(FairseqDataclass):
     no_pretrained_weights: bool = False
     linear_classifier: bool = False
     reset_classifier: bool = True
+    train_local_encoder: bool = False
+    use_tfddc: bool = False
+    tfddc_num_layers: int = 2
     num_classes: int = 1000
     mixup: float = 0.0
     cutmix: float = 0.0
@@ -203,6 +206,8 @@ class MaeImageClassificationModel(BaseFairseqModel):
                 ] = cfg.prenet_dropout
                 
                 pretrained_args.model["modalities"]["image"]['target_length'] = cfg.target_length
+                pretrained_args.model["modalities"]["image"]["use_tfddc"] = cfg.use_tfddc
+                pretrained_args.model["modalities"]["image"]["tfddc_num_layers"] = cfg.tfddc_num_layers
         else:
             # not d2v multi
             with open_dict(pretrained_args):
@@ -246,6 +251,10 @@ class MaeImageClassificationModel(BaseFairseqModel):
         if self.linear_classifier:
             logger.info("Freezing encoder for linear probing...")
             model.requires_grad_(False)
+            if cfg.train_local_encoder:
+                for n, p in model.named_parameters():
+                    if "modality_encoders.IMAGE.local_encoder" in n:
+                        p.requires_grad_(True)
 
         self.fc_norm = None
         if self.cfg.use_fc_norm:
@@ -379,7 +388,7 @@ class MaeImageClassificationModel(BaseFairseqModel):
         if self.training and self.specaug:
             imgs = self.spectrogram_augment(imgs)
 
-        if self.linear_classifier:
+        if self.linear_classifier and not self.cfg.train_local_encoder:
             with torch.no_grad():
                 x = self.model_forward(imgs)
         else:

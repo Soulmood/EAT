@@ -4,14 +4,62 @@ import torch.nn.functional as F
 
 from timm.models.layers import DropPath, to_2tuple
 
+"""
+输入 (B, 1, F, T)
+        ↓
+TFDDCModule
+    ├─ stem (Conv)
+    ├─ TFDDC × N
+    ├─ patch_proj (Patchify)
+    ├─ TFSA (时频注意力)
+        ↓
+输出 (B, N_patches, C)
+        ↓
+Transformer (EAT_pretraining.py)
+        ↓
+Decoder / Loss（含 PGEnergy）
+"""
 
-class CDilated(nn.Module):
-    def __init__(self, n_in, n_out, k_size, stride=1, dilation=1, groups=1):
+"""
+结构依赖关系
+CDilated
+   ↑
+TFDDC
+   ↑
+TFDDCModule
+   ↓
+TFSA
+   ↓
+Transformer (EAT)
+   ↓
+Decoder
+   ↓
+PGEnergyModule（loss）
+
+数据流
+输入频谱 (B,1,F,T)
+        ↓
+TFDDCModule
+    ↓
+(B, N, C)
+        ↓
+Transformer Encoder（EAT）
+        ↓
+Decoder
+        ↓
+recon (B,N,D)
+        ↓
+PGEnergyModule
+        ↓
+loss
+"""
+class CDilated(nn.Module):# 膨胀卷积封装
+    def __init__(self, n_in, n_out, k_size, stride=1, dilation=1, groups=1):# 构造函数
         super().__init__()
         k_h, k_w = to_2tuple(k_size)
         padding_h = ((k_h - 1) // 2) * dilation
         padding_w = ((k_w - 1) // 2) * dilation
-        self.padding = nn.ConstantPad2d((padding_w, padding_w, padding_h, padding_h), 0.0)
+        self.padding = nn.ConstantPad2d((padding_w, padding_w, padding_h, padding_h), 0.0)# 参数顺序(left, right, top, bottom)
         self.conv = nn.Conv2d(
             n_in,
             n_out,
@@ -26,7 +74,12 @@ class CDilated(nn.Module):
         return self.conv(self.padding(x))
 
 
-class TFSA(nn.Module):
+class TFSA(nn.Module): #Time-Frequency Self-Attention
+    """
+    全局时频 attention（类似 Transformer）
+
+    时间因果 attention（类似序列模型）  
+    """
     def __init__(self, c=768, causal=True):
         super().__init__()
         d_c = max(1, c // 4)
@@ -66,7 +119,7 @@ class TFSA(nn.Module):
         kt = kt.mean(dim=2)
         t_score = torch.bmm(qt.transpose(1, 2), kt) / (self.d_c**0.5)
         if self.causal:
-            mask = torch.ones(t, t, device=t_score.device, dtype=torch.bool).triu_(1)
+            mask = torch.ones(t, t, device=t_score.device, dtype=torch.bool).triu_(1)# 构造上三角mask
             t_score = t_score.masked_fill(mask, -1e9)
         t_attn = t_score.softmax(dim=-1)
         out_t = torch.bmm(t_attn, out.mean(dim=2).transpose(1, 2)).transpose(1, 2)
@@ -74,7 +127,31 @@ class TFSA(nn.Module):
         return out + inp
 
 
-class TFDDC(nn.Module):
+class TFDDC(nn.Module):#时频解耦 + 膨胀卷积 + 深度可分离卷积 + 可学习融合权重
+    """
+    这一模块的本质总结（模型设计角度）
+    这是一个：
+    “CNN版 Transformer block 替代结构”
+    它替代了什么？
+    Transformer组件	TFDDC 对应
+    Self-Attention	Dilated Conv
+    FFN	1x1 Conv expand
+    Residual	skip_path
+    Dropout	DropPath
+    内部结构
+    x
+    ↓
+    1×1 Conv（扩展通道）
+    ↓
+    分支1：时间卷积 (3×5, dilation)
+    分支2：频率卷积 (5×3, dilation)
+    ↓
+    加权融合（可学习 α）
+    ↓
+    1×1 Conv（压缩）
+    ↓
+    Residual + DropPath
+    """
     def __init__(self, in_chs, expan_ratio=4, stride=1, dilation=1, drop_path=0.0):
         super().__init__()
         self.skip_path = (
@@ -125,7 +202,14 @@ class TFDDC(nn.Module):
         return x
 
 
-class TFDDCModule(nn.Module):
+class TFDDCModule(nn.Module):#桥接 CNN → Transformer
+    """
+    这个模块决定：
+    CNN 输出如何变成 token
+    为什么可以接 Transformer（EAT 主体）
+    同时它里面包含：
+    👉 TFSA 的调用（attention + CNN 融合）
+    """
     def __init__(self, img_size, patch_size=16, in_chans=1, embed_dim=768, num_tfddc=2):
         super().__init__()
         self.img_size = to_2tuple(img_size)
@@ -156,7 +240,7 @@ class TFDDCModule(nn.Module):
         return x
 
 
-class PGEnergyModule(nn.Module):
+class PGEnergyModule(nn.Module):#物理约束 loss
     def forward(self, recon_patches, target_patches):
         recon_energy = (recon_patches.float() ** 2).mean(dim=-1)
         target_energy = (target_patches.float() ** 2).mean(dim=-1)

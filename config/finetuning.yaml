@@ -83,6 +83,11 @@ model:
   specaug: true
   mask_ratio: 0.2
   prediction_mode: PredictionMode.CLS_TOKEN
+  linear_classifier: false
+  reset_classifier: true
+  train_local_encoder: false
+  use_tfddc: false
+  tfddc_num_layers: 2
 
   spcv2_eval: false
   esc50_eval: false
