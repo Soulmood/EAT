@@ -3,6 +3,7 @@
 export CUDA_VISIBLE_DEVICES=0
 
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+export HYDRA_FULL_ERROR=1
 
 mkdir -p /home/adminster/DYH/eatdata/results_20percent_tfddc_keephead_10ep
 
@@ -16,8 +17,9 @@ python /home/adminster/DYH/fairseq/fairseq_cli/hydra_train.py -m \
     checkpoint.keep_best_checkpoints=1 \
     checkpoint.best_checkpoint_metric=mAP \
     checkpoint.maximize_best_checkpoint_metric=true \
-    dataset.batch_size=2 \
-    optimization.update_freq=[8] \
+    dataset.batch_size=1 \
+    dataset.batch_size_valid=1 \
+    optimization.update_freq=[16] \
     dataset.num_workers=8 \
     task.data=/home/adminster/DYH/EAT_manifest/AS20K_20percent \
     task.target_length=1024 \

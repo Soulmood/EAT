@@ -6,6 +6,7 @@
 # can be found in the PATENTS file in the same directory.
 
 import logging
+import os
 import sys
 
 from typing import Optional, List
@@ -18,7 +19,12 @@ from fairseq.tasks import FairseqTask, register_task
 try:
     from ..data import MaeImageDataset
 except:
-    sys.path.append("..")
+    # When this module is loaded as a top-level `tasks.*` package (not `EAT.tasks.*`),
+    # relative imports can fail. Add the EAT repo root (directory containing `data/`)
+    # to sys.path based on this file location.
+    _EAT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    if _EAT_ROOT not in sys.path:
+        sys.path.insert(0, _EAT_ROOT)
     from data import MaeImageDataset
 
 logger = logging.getLogger(__name__)

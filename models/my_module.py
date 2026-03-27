@@ -120,7 +120,8 @@ class TFSA(nn.Module): #Time-Frequency Self-Attention
         t_score = torch.bmm(qt.transpose(1, 2), kt) / (self.d_c**0.5)
         if self.causal:
             mask = torch.ones(t, t, device=t_score.device, dtype=torch.bool).triu_(1)# 构造上三角mask
-            t_score = t_score.masked_fill(mask, -1e9)
+            # `-1e9` overflows in fp16; use dtype-safe minimum instead.
+            t_score = t_score.masked_fill(mask, torch.finfo(t_score.dtype).min)
         t_attn = t_score.softmax(dim=-1)
         out_t = torch.bmm(t_attn, out.mean(dim=2).transpose(1, 2)).transpose(1, 2)
         out = out + out_t.unsqueeze(2)
